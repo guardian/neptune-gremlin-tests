@@ -1,13 +1,14 @@
+package services
+
 import io.circe.Decoder
+import io.circe.generic.auto._
 import models.{Recipe, RecipeIndex, RecipeIndexEntry}
 import sttp.client4.quick._
 import sttp.model.StatusCode
-import io.circe.generic.auto._
 
 class RecipesApi(baseUrl: String) {
   private def getBodyAs[T:Decoder](body:Either[String,String]) = for {
       bodyContentString <- body
-      _ = println(bodyContentString)
       parsed <- io.circe.parser.parse(bodyContentString).left.map(_.toString)
       marshalled <- parsed.as[T].left.map(_.toString())
     } yield marshalled

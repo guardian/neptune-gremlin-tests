@@ -9,8 +9,8 @@ case class RecipeImage(
                         imageType: Option[String] = None,
                         caption: Option[String] = None,
                         mediaApiUri: Option[String] = None,
-                        width: Int,
-                        height: Int
+                        width: Option[Int],
+                        height: Option[Int]
                       )
 
 case class Amount(min: Option[Float], max: Option[Float])
@@ -27,7 +27,7 @@ case class IngredientData(
 
 case class Ingredient(recipeSection: String, ingredientsList: Seq[IngredientData])
 
-case class Serves(amount: Amount, unit: String, text: String)
+case class Serves(amount: Amount, unit: Option[String], text: Option[String])
 
 case class Timing(qualifier: String, durationInMins: Option[Amount], text: Option[String])
 
@@ -36,11 +36,11 @@ case class Instruction(description: String, images: Option[Seq[RecipeImage]])
 
 case class Recipe(
                              id: String,
-                             composerId: String,
+                             composerId: Option[String],
                              canonicalArticle: String,
                              title: String,
                              description: String,
-                             isAppReady: Boolean,
+                             isAppReady: Option[Boolean],
                              featuredImage: Option[RecipeImage],
                              contributors: Seq[String],
                              ingredients: Seq[Ingredient],
