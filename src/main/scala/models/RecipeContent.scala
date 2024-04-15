@@ -25,7 +25,7 @@ case class IngredientData(
                            optional: Option[Boolean]
                          )
 
-case class Ingredient(recipeSection: String, ingredientsList: Seq[IngredientData])
+case class Ingredient(recipeSection: Option[String], ingredientsList: Seq[IngredientData])
 
 case class Serves(amount: Amount, unit: Option[String], text: Option[String])
 
