@@ -19,5 +19,6 @@ libraryDependencies ++= Seq(
   "org.apache.tinkerpop" % "gremlin-driver" % "3.6.5",
   "org.apache.tinkerpop" % "gremlin-groovy" % "3.6.5",
   "org.slf4j" % "slf4j-jdk14" % "1.7.25",
-  "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M11"
+  "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M11",
+  "ch.qos.logback" % "logback-classic" % "1.5.5"
 )

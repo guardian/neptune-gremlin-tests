@@ -3,10 +3,13 @@ package services
 import io.circe.Decoder
 import io.circe.generic.auto._
 import models.{Recipe, RecipeIndex, RecipeIndexEntry}
+import org.slf4j.LoggerFactory
 import sttp.client4.quick._
 import sttp.model.StatusCode
 
 class RecipesApi(baseUrl: String) {
+  private val logger = LoggerFactory.getLogger(getClass)
+
   private def getBodyAs[T:Decoder](body:Either[String,String]) = for {
       bodyContentString <- body
       parsed <- io.circe.parser.parse(bodyContentString).left.map(_.toString)

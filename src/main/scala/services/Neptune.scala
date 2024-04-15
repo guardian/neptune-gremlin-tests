@@ -13,11 +13,13 @@ import org.apache.tinkerpop.gremlin.structure.{Edge, T, Vertex}
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__
 import io.circe.generic.auto._
 import io.circe.syntax._
+import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 class Neptune(cluster: Cluster) {
+  private val logger = LoggerFactory.getLogger(getClass)
   def withTraversal(func: GraphTraversalSource=>Unit) = {
     val g = traversal().withRemote(DriverRemoteConnection.using(cluster))
     try {
@@ -28,9 +30,18 @@ class Neptune(cluster: Cluster) {
   }
 
   private def upsertRecipeNode(recipe:Recipe)(implicit g:GraphTraversalSource) = {
+    val nodeProps = Map(
+      "title"->Some(recipe.title),
+      "description"->Some(recipe.description),
+      "bookCredit"->recipe.bookCredit,
+      "composerId"->recipe.composerId,
+      "serves"->Some(recipe.serves.asJson.noSpaces),
+      "featuredImage"->Some(recipe.featuredImage.asJson.noSpaces),
+      "timings"->Some(recipe.timings.asJson.noSpaces)
+    )
     g.V().has(T.id, recipe.id)
       .fold()
-      .coalesce(__.unfold().property("Hello", 1), __.addV("Recipe").property(T.id, recipe.id).property("Title", recipe.title).property("Description", recipe.description))
+      .coalesce(addProps[Vertex,Vertex](__.unfold(), nodeProps), addProps[Vertex,Vertex](__.addV("Recipe").property(T.id, recipe.id), nodeProps))
       .next()
   }
 
@@ -73,31 +84,30 @@ class Neptune(cluster: Cluster) {
       .fold()
       .coalesce(__.unfold(), __.addV("Ingredient").property("Name", ingredient.name))
       .next()
-      //.properties(edgeProps :_*)
-//      .properties(
-//        "RecipeSection", recipeSection.orNull,
-//        "Amount", ingredient.amount.asJson.noSpaces,
-//        "Unit", ingredient.unit.orNull,
-//        "Text", ingredient.text.orNull,
-//        "Prefix", ingredient.prefix.orNull,
-//        "Suffix", ingredient.suffix.orNull,
-//        "Optional", ingredient.optional.getOrElse(false).toString,
-//      )
-//    val edgeArgs = edgeProps.collect({ case (k, Some(v))=>k->v}).toSeq
-//    ingredNode.addEdge("IngredientOf", parent, edgeArgs :_*)
-
-    //addProps(g.V(ingredNode).addE("IngredientOf").to(parent), edgeProps).iterate()
-//    val opWithProps = addProps(g.V("Ingredient").has("Name", ingredient.name).addE("IngredientOf").property(T.label, "IngredientOf"), edgeProps)
-//
-//      opWithProps.to(__.V("Recipe").has(T.id, recipeId)).iterate()
     upsertEdge(ingredNode, parent, "IngredientOf", edgeProps)
   }
 
-  private def upsertEdge(source:Vertex, parent:Vertex, name:String, edgeProps:Map[String, Option[String]])(implicit g:GraphTraversalSource) =
+  private def upsertEdge(source:Vertex, parent:Vertex, name:String, edgeProps:Map[String, Option[String]] = Map())(implicit g:GraphTraversalSource) =
     g.V(source).outE(name)
       .fold()
       .coalesce(__.unfold(), addProps[Vertex, Edge](__.V(source).addE(name).to(__.V(parent)), edgeProps))
       .next()
+
+  private def upsertStringNodeNode(nodeType: String, edgeType:String, str: String, recipe: Vertex)(implicit g:GraphTraversalSource) = {
+    if(nodeType=="" || edgeType=="" || str=="") {
+      None
+    } else {
+
+      val contribVertex = g.V().has(T.id, str)
+        .fold()
+        .coalesce(__.unfold(), __.addV(nodeType).property(T.id, str))
+        .next()
+
+      upsertEdge(contribVertex, recipe, edgeType)
+      Some(contribVertex)
+    }
+  }
+
   /**
    * Adds the given recipe to the database
    * @param recipe Recipe object to insert
@@ -113,19 +123,14 @@ class Neptune(cluster: Cluster) {
         ingredSection <- recipe.ingredients
         ingredient <- ingredSection.ingredientsList
         _ = upsertIngredientNode(ingredient, ingredSection.recipeSection, recepNode)
-//        _ = __.V("Ingredient").has("Name", ingredient.name).addE("Contains")
-//          .to(__.V("Recipe").has(T.id, recipe.id))
-//          .properties("RecipeSection", ingredSection.recipeSection.orNull,
-//            "Amount", ingredient.amount.asJson.noSpaces,
-//            "Unit", ingredient.unit.orNull,
-//            "Text", ingredient.text.orNull,
-//            "Prefix", ingredient.prefix.orNull,
-//            "Suffix", ingredient.suffix.orNull,
-//            "Optional", ingredient.optional.getOrElse(false).toString,
-//          )
-//          .iterate()
       } yield ingredient
 
+      recipe.contributors.foreach(contrib=>upsertStringNodeNode("Contributor", "ContributedTo", contrib, recepNode))
+      recipe.cuisineIds.foreach(id=>upsertStringNodeNode("CuisineId", "CuisineOf", id, recepNode))
+      recipe.suitableForDietIds.foreach(id=>upsertStringNodeNode("DietId", "SuitableDiet", id, recepNode))
+      recipe.techniquesUsedIds.foreach(id=>upsertStringNodeNode("Technique", "UsedIn", id, recepNode))
+      recipe.mealTypeIds.foreach(id=>upsertStringNodeNode("MealType", "MealType", id, recepNode))
+      upsertStringNodeNode("CanonicalArticle","CanonicalArticle", recipe.canonicalArticle, recepNode)
     }
   }
   def shutdown = {
