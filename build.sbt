@@ -22,3 +22,20 @@ libraryDependencies ++= Seq(
   "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M11",
   "ch.qos.logback" % "logback-classic" % "1.5.5"
 )
+
+// META-INF discarding
+ThisBuild / assemblyMergeStrategy := {
+  case PathList("META-INF", xs @ _*)=> MergeStrategy.discard
+  case PathList(ps @ _*) if ps.last endsWith ".class" => MergeStrategy.first
+  case x=>
+    val oldStrategy = (ThisBuild / assemblyMergeStrategy).value
+    oldStrategy(x)
+}
+//mergeStrategy in assembly := (mergeStrategy in assembly) { (old) =>
+//{
+//  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+//  case x => MergeStrategy.first
+//}
+
+
+//enablePlugins(DebianPlugin)
