@@ -11,9 +11,13 @@ import org.apache.tinkerpop.gremlin.process.traversal.AnonymousTraversalSource.t
 import org.apache.tinkerpop.gremlin.driver.remote.DriverRemoteConnection
 import org.apache.tinkerpop.gremlin.structure.{Edge, T, Vertex}
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__._
 import io.circe.generic.auto._
 import io.circe.syntax._
+import org.apache.tinkerpop.gremlin.structure.VertexProperty.Cardinality
 import org.slf4j.LoggerFactory
+import scala.language.implicitConversions
+import NeptuneProperty.Implicits._
 
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -30,14 +34,16 @@ class Neptune(cluster: Cluster) {
   }
 
   private def upsertRecipeNode(recipe:Recipe)(implicit g:GraphTraversalSource) = {
-    val nodeProps = Map(
+
+    val nodeProps:Map[String, Option[NeptuneProperty]] = Map(
       "title"->Some(recipe.title),
       "description"->Some(recipe.description),
       "bookCredit"->recipe.bookCredit,
       "composerId"->recipe.composerId,
       "serves"->Some(recipe.serves.asJson.noSpaces),
       "featuredImage"->Some(recipe.featuredImage.asJson.noSpaces),
-      "timings"->Some(recipe.timings.asJson.noSpaces)
+      "timings"->Some(recipe.timings.map(_.asJson.noSpaces)),
+      "instructions"->Some(recipe.instructions.map(_.asJson.noSpaces))
     )
     g.V().has(T.id, recipe.id)
       .fold()
@@ -52,11 +58,24 @@ class Neptune(cluster: Cluster) {
    * @tparam T
    * @return
    */
-  private def addProps[A,B](from:GraphTraversal[A, B], props:Map[String, Option[String]]):GraphTraversal[A, B] = {
+  private def addProps[A,B](from:GraphTraversal[A, B], props:Map[String, Option[NeptuneProperty]]):GraphTraversal[A, B] = {
     props.foldLeft(from)((node, prop)=>{
       prop._2 match {
-        case Some(value)=>
-          node.property(prop._1, value)
+        case Some(StringProperty(value))=>
+          node.property(Cardinality.single, prop._1, value)
+        case Some(IntProperty(value))=>
+          node.property(Cardinality.single, prop._1, value)
+        case Some(DoubleProperty(value))=>
+          node.property(Cardinality.single, prop._1, value)
+        case Some(BoolProperty(value))=>
+          node.property(Cardinality.single, prop._1, value)
+        case Some(p @SetProperty(_))=>
+//          val explodedValues = value
+//            .toList
+//            .flatMap((kv)=>Seq(kv._1, kv._2))
+          node.property(Cardinality.set, prop._1, p.getUntyped : _*)
+        case Some(p@ListProperty(_))=>
+          node.property(Cardinality.list, prop._1, p.getUntyped :_*)
         case None=>
           node
       }
@@ -70,14 +89,15 @@ class Neptune(cluster: Cluster) {
    * @return GraphTraversal representing the given vertex. This can then be connected via Edges.
    */
   private def upsertIngredientNode(ingredient:IngredientData, recipeSection:Option[String], parent:Vertex)(implicit g:GraphTraversalSource) = {
-    val edgeProps = Map(
+    val edgeProps:Map[String, Option[NeptuneProperty]] = Map(
       "RecipeSection"->recipeSection,
-      "Amount"->Some(ingredient.amount.asJson.noSpaces),
+      "AmountMin"->ingredient.amount.flatMap(_.min),
+      "AmountMax"->ingredient.amount.flatMap(_.max),
       "Unit"->ingredient.unit,
       "Text"->ingredient.text,
       "Prefix"->ingredient.prefix,
       "Suffix"->ingredient.suffix,
-      "Optional"->ingredient.optional.map(_.toString),
+      "Optional"->ingredient.optional,
     )
 
     val ingredNode = g.V().has("Name", ingredient.name)
@@ -87,8 +107,8 @@ class Neptune(cluster: Cluster) {
     upsertEdge(ingredNode, parent, "IngredientOf", edgeProps)
   }
 
-  private def upsertEdge(source:Vertex, parent:Vertex, name:String, edgeProps:Map[String, Option[String]] = Map())(implicit g:GraphTraversalSource) =
-    g.V(source).outE(name)
+  private def upsertEdge(source:Vertex, parent:Vertex, name:String, edgeProps:Map[String, Option[NeptuneProperty]] = Map())(implicit g:GraphTraversalSource) =
+    g.V(source).outE(name).filter(inV().is(parent))
       .fold()
       .coalesce(__.unfold(), addProps[Vertex, Edge](__.V(source).addE(name).to(__.V(parent)), edgeProps))
       .next()

@@ -7,9 +7,14 @@ object Main {
   private val logger = LoggerFactory.getLogger(getClass)
 
   def main(args: Array[String]):Unit = {
+    val options = CommandlineArgs(args)
+
     val repi = new RecipesApi("https://recipes.guardianapis.com")
-    Neptune("localhost", 8182, unsafe = true) match {
+    val neptuneHost = options.neptuneHost.getOrElse("localhost")
+    logger.info(s"Connecting to Neptune at ${neptuneHost}...")
+    Neptune(neptuneHost, 8182, unsafe = true) match {
       case Success(nep) =>
+        logger.info(s"Connected.")
         repi.getIndex() match {
           case Left(err) =>
             logger.error(err)

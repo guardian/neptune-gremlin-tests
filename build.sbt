@@ -25,6 +25,7 @@ libraryDependencies ++= Seq(
 
 // META-INF discarding
 ThisBuild / assemblyMergeStrategy := {
+  case PathList("META-INF", "services", "org.slf4j.spi.SLF4JServiceProvider") => MergeStrategy.singleOrError
   case PathList("META-INF", xs @ _*)=> MergeStrategy.discard
   case PathList(ps @ _*) if ps.last endsWith ".class" => MergeStrategy.first
   case x=>
